@@ -1,0 +1,86 @@
+[
+  {
+    "id": 1,
+    "name": "Classic Chic",
+    "colors": ["#1D2A44", "#E5BFB1", "#BA7A5E"],
+    "part": 1,
+    "description": "Deep Navy, Soft Peach, and Terracotta. An elegant, balanced historical pairing."
+  },
+  {
+    "id": 2,
+    "name": "Spring Zephyr",
+    "colors": ["#4E6D53", "#ECC5C0", "#F7E6C4"],
+    "part": 1,
+    "description": "Sage Green, Pale Rose, and Creamy Yellow. Light, airy, and refreshing."
+  },
+  {
+    "id": 3,
+    "name": "Retro Earth",
+    "colors": ["#D97A3E", "#B07D62", "#4D5233"],
+    "part": 1,
+    "description": "Burnt Orange, Warm Taupe, and Moss Green. Classic late-century mid-tone palette."
+  },
+  {
+    "id": 4,
+    "name": "Imperial Autumn",
+    "colors": ["#6F1D1B", "#FFE6A7", "#99582A"],
+    "part": 1,
+    "description": "Burgundy, Warm Mustard, and Rich Sienna. Sophisticated warmth with high contrast."
+  },
+  {
+    "id": 5,
+    "name": "Teal and Rosewood",
+    "colors": ["#1A5249", "#D8A48F", "#5D3E3A"],
+    "part": 1,
+    "description": "Rich Teal, Muted Salmon, and Charcoal Mahogany. Rich and deeply intellectual."
+  },
+  {
+    "id": 6,
+    "name": "Edo Ochre",
+    "colors": ["#CC8B3C", "#3C4856", "#E3D5CA"],
+    "part": 1,
+    "description": "Golden Ochre, Indigo Gray, and Soft Alabaster. Inspired by Edo-era textiles."
+  },
+  {
+    "id": 7,
+    "name": "Midnight Blossom",
+    "colors": ["#0E1424", "#BA3F5D", "#ECC7C1"],
+    "part": 1,
+    "description": "Deep Indigo, Rich Plum, and Powder Pink. Striking evening attire aesthetic."
+  },
+  {
+    "id": 8,
+    "name": "Forest Meadow",
+    "colors": ["#254230", "#A8C3A0", "#EAE3D2"],
+    "part": 2,
+    "description": "Pine Green, Soft Meadow, and Linen. Restful, organic, and peaceful."
+  },
+  {
+    "id": 9,
+    "name": "Summer Afternoon",
+    "colors": ["#5A7D9A", "#F39C12", "#FFF9E6"],
+    "part": 2,
+    "description": "Slate Blue, Marigold, and Off-White. High-energy contrast balanced by clean space."
+  },
+  {
+    "id": 10,
+    "name": "Sandalwood Harmony",
+    "colors": ["#8C6239", "#D6C3B0", "#2D312E"],
+    "part": 2,
+    "description": "Sandalwood Brown, Cold Khaki, and Off-Black. Understated, minimal, and sophisticated."
+  },
+  {
+    "id": 11,
+    "name": "Royal Plumage",
+    "colors": ["#4F2D73", "#CCA730", "#307C8C"],
+    "part": 2,
+    "description": "Tyrian Purple, Dull Gold, and Sea-Teal. High contrast regal palette."
+  },
+  {
+    "id": 12,
+    "name": "Lichen and Stone",
+    "colors": ["#728C7D", "#CBD6D0", "#3E3D40"],
+    "part": 2,
+    "description": "Muted Lichen, Soft Pebble, and Dark Charcoal. Monochromatic-adjacent earthy chic."
+  }
+]

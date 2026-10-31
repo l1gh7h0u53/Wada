@@ -1,0 +1,6 @@
+{
+  "name": "Wada",
+  "description": "Smart wardrobe clothing match assistant using Sanzo Wada's A Dictionary of Color Combinations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
