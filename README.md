@@ -1,6 +1,6 @@
 # 🎨 Wada (v1.6.0)
 
-> A modern Android color-matching & wardrobe canvas powered by Sanzo Wada’s pioneering 1930s color combinations (*Haishoku Sōkan* • 配色総鑑).
+> A modern vibe coded Android color-matching & wardrobe canvas powered by Sanzo Wada’s pioneering 1930s color combinations (*Haishoku Sōkan* • 配色総鑑).
 
 [![Version](https://img.shields.io/badge/version-1.6.0-blue.svg)](https://github.com/your-username/wada/releases/tag/v1.6.0)
 [![Kotlin](https://img.shields.io/badge/Kotlin-100%25-7F52FF.svg)](https://kotlinlang.org/)
