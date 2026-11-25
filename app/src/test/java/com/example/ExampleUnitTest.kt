@@ -163,4 +163,28 @@ class ExampleUnitTest {
     assertEquals(11, hotPick.item.id)
     assertTrue(hotPick.reason.contains("Light"))
   }
+
+  @Test
+  fun offlineColorCachingAndSearch_worksWithoutNetwork() {
+    val wadaPalette = listOf(
+      com.example.data.WadaColor(index = 1, name = "Indigo", hex = "#1E2C3D", combinations = listOf(1)),
+      com.example.data.WadaColor(index = 2, name = "Andover Green", hex = "#4E6D53", combinations = listOf(1))
+    )
+
+    val label = com.example.util.WadaColorRegistry.buildSearchableWadaLabel("#1E2C3D", wadaPalette)
+    assertTrue(label.contains("Indigo"))
+    assertTrue(label.contains("Kon"))
+
+    assertTrue(com.example.util.WadaColorRegistry.matchesWadaColorSearch("#1E2C3D", "#1E2C", wadaPalette))
+    assertTrue(com.example.util.WadaColorRegistry.matchesWadaColorSearch("#1E2C3D", "Kon", wadaPalette))
+    assertFalse(com.example.util.WadaColorRegistry.matchesWadaColorSearch("#1E2C3D", "Moegi", wadaPalette))
+
+    val cachedWeather = com.example.util.WeatherInfo(
+      temperatureCelsius = 19.0,
+      condition = com.example.util.WeatherCondition.PARTLY_CLOUDY,
+      windSpeedKmh = 8.0,
+      isFromCache = true
+    )
+    assertTrue(cachedWeather.isFromCache)
+  }
 }

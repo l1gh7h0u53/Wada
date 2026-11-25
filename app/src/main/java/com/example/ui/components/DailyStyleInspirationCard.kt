@@ -553,8 +553,9 @@ private fun WeatherOutfitSuggestionSection(
                                     tint = MaterialTheme.colorScheme.onTertiaryContainer,
                                     modifier = Modifier.size(14.dp)
                                 )
+                                val cachedSuffix = if (info.isFromCache) " • Cached" else ""
                                 Text(
-                                    text = "${info.formattedTemperature} • ${info.condition.label}",
+                                    text = "${info.formattedTemperature} • ${info.condition.label}$cachedSuffix",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onTertiaryContainer,

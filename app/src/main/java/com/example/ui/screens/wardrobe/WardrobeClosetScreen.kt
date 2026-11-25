@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
@@ -81,18 +82,27 @@ fun WardrobeClosetScreen(
     val focusManager = LocalFocusManager.current
 
     val allClothing by viewModel.allClothing.collectAsState()
+    val filteredList by viewModel.filteredClosetClothing.collectAsState()
+    val closetFilter by viewModel.closetFilter.collectAsState()
+    val sqlColorGroupCounts by viewModel.colorGroupCounts.collectAsState()
     val categories by viewModel.categories.collectAsState()
     val wadaColors by viewModel.wadaColors.collectAsState()
     val selectedGarment by viewModel.selectedGarment.collectAsState()
+    val isOffline by viewModel.isOffline.collectAsState()
 
-    var selectedFilter by remember { mutableStateOf("All") }
-    var selectedStyleTag by remember { mutableStateOf("All Styles") }
-    var selectedColorGroup by remember { mutableStateOf("All") }
-    var colorSearchQuery by remember { mutableStateOf("") }
+    val selectedFilter = closetFilter.category
+    val selectedStyleTag = closetFilter.styleTag
+    val selectedColorGroup = closetFilter.colorGroup
+    val colorSearchQuery = closetFilter.colorQuery
+
     var showColorLore by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var itemPendingDelete by remember { mutableStateOf<ClothingItem?>(null) }
     var itemPendingEdit by remember { mutableStateOf<ClothingItem?>(null) }
+
+    LaunchedEffect(context) {
+        viewModel.startNetworkMonitoring(context)
+    }
 
     // LazyGrid scroll state
     val gridState = rememberLazyGridState()
@@ -111,31 +121,14 @@ fun WardrobeClosetScreen(
         }
     }
 
-    // Compute primary color group counts from all closet items
-    val colorGroupCounts = remember(allClothing) {
-        allClothing.groupingBy { item ->
-            item.colorGroup.ifBlank { ColorGroupClassifier.classifyHex(item.hexColor).label }
-        }.eachCount()
-    }
-
-    // Filter items based on active category chip, style tag, primary color group, and Wada color query
-    val filteredList = remember(allClothing, selectedFilter, selectedStyleTag, selectedColorGroup, colorSearchQuery, wadaColors) {
-        allClothing.filter { item ->
-            val matchesCategory = when (selectedFilter) {
-                "All" -> true
-                "Favorites" -> item.isFavorite
-                else -> item.category.equals(selectedFilter, ignoreCase = true)
-            }
-            val matchesStyle = StyleTagHelper.matchesStyleTag(item, selectedStyleTag, wadaColors)
-            val itemGroup = item.colorGroup.ifBlank { ColorGroupClassifier.classifyHex(item.hexColor).label }
-            val matchesColorGroup = selectedColorGroup == "All" ||
-                itemGroup.equals(selectedColorGroup, ignoreCase = true)
-            val matchesColor = if (colorSearchQuery.isBlank()) {
-                true
-            } else {
-                WadaColorRegistry.matchesWadaColorSearch(item.hexColor, colorSearchQuery, wadaColors)
-            }
-            matchesCategory && matchesStyle && matchesColorGroup && matchesColor
+    // Prefer Room SQLite pre-aggregated counts, falling back to live classification before backfill completes
+    val colorGroupCounts = remember(sqlColorGroupCounts, allClothing) {
+        if (sqlColorGroupCounts.isNotEmpty() || allClothing.isEmpty()) {
+            sqlColorGroupCounts
+        } else {
+            allClothing.groupingBy { item ->
+                item.colorGroup.ifBlank { ColorGroupClassifier.classifyHex(item.hexColor).label }
+            }.eachCount()
         }
     }
 
@@ -147,6 +140,36 @@ fun WardrobeClosetScreen(
             .testTag("wardrobe_closet_screen")
     ) {
         Spacer(modifier = Modifier.height(10.dp))
+
+        if (isOffline) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
+                border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                modifier = Modifier
+                    .padding(bottom = 8.dp)
+                    .testTag("closet_offline_cache_badge")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CloudOff,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Offline • Local SQLite wardrobe cache active",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+            }
+        }
 
         // 1. Horizontal Scrollable 'Style Tags' (Positioned ABOVE the closet search bar)
         LazyRow(
@@ -160,7 +183,9 @@ fun WardrobeClosetScreen(
                 FilterChip(
                     selected = isSelected,
                     onClick = {
-                        selectedStyleTag = if (isSelected && tag.name != "All Styles") "All Styles" else tag.name
+                        viewModel.updateClosetStyleTagFilter(
+                            if (isSelected && tag.name != "All Styles") "All Styles" else tag.name
+                        )
                     },
                     label = {
                         Text(
@@ -191,11 +216,11 @@ fun WardrobeClosetScreen(
         WadaColorSearchBar(
             query = colorSearchQuery,
             onQueryChange = {
-                colorSearchQuery = it
+                viewModel.updateClosetColorQuery(it)
                 if (it.isNotBlank()) showColorLore = true
             },
             onClearQuery = {
-                colorSearchQuery = ""
+                viewModel.updateClosetColorQuery("")
                 showColorLore = false
             },
             onToggleLore = { showColorLore = !showColorLore },
@@ -239,10 +264,10 @@ fun WardrobeClosetScreen(
                     selected = isSelected,
                     onClick = {
                         if (isSelected && pill.query != null) {
-                            colorSearchQuery = "" // toggle off if tapped again
+                            viewModel.updateClosetColorQuery("") // toggle off if tapped again
                             showColorLore = false
                         } else {
-                            colorSearchQuery = pill.query ?: ""
+                            viewModel.updateClosetColorQuery(pill.query ?: "")
                             if (pill.query != null) showColorLore = true
                         }
                     },
@@ -294,7 +319,7 @@ fun WardrobeClosetScreen(
         ColorGroupFilterRow(
             selectedGroup = selectedColorGroup,
             groupCounts = colorGroupCounts,
-            onGroupSelected = { selectedColorGroup = it }
+            onGroupSelected = { viewModel.updateClosetColorGroupFilter(it) }
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -304,7 +329,7 @@ fun WardrobeClosetScreen(
         LazyGridFilterChips(
             options = filterOptions,
             selected = selectedFilter,
-            onSelectedChange = { selectedFilter = it }
+            onSelectedChange = { viewModel.updateClosetCategoryFilter(it) }
         )
 
         // 7. Active Filter Indicators feedback bar
@@ -357,9 +382,7 @@ fun WardrobeClosetScreen(
                         modifier = Modifier
                             .clip(WadaShapes.FilterPill)
                             .clickable {
-                                colorSearchQuery = ""
-                                selectedStyleTag = "All Styles"
-                                selectedColorGroup = "All"
+                                viewModel.resetClosetFilters()
                                 showColorLore = false
                             }
                             .padding(horizontal = 6.dp, vertical = 2.dp)
@@ -393,7 +416,7 @@ fun WardrobeClosetScreen(
                         title = "No $selectedColorGroup Garments",
                         subtitle = "No garments in your closet are tagged in the $selectedColorGroup color group under the current filters. Try another color group or show all colors.",
                         primaryButtonText = "Show All Color Groups",
-                        onPrimaryClick = { selectedColorGroup = "All" },
+                        onPrimaryClick = { viewModel.updateClosetColorGroupFilter("All") },
                         secondaryButtonText = "Digitize New Piece",
                         onSecondaryClick = onNavigateToDigitizer
                     )
@@ -403,7 +426,7 @@ fun WardrobeClosetScreen(
                         subtitle = "None of your current wardrobe garments align with the traditional Wada color \"$colorSearchQuery\". Try searching for another classical tone like Kon (Indigo), Moegi (Green), Yamabuki (Gold), or clear the color filter.",
                         primaryButtonText = "Clear Color Filter",
                         onPrimaryClick = {
-                            colorSearchQuery = ""
+                            viewModel.updateClosetColorQuery("")
                             showColorLore = false
                         },
                         secondaryButtonText = "Digitize New Piece",
@@ -414,7 +437,7 @@ fun WardrobeClosetScreen(
                         title = "No $selectedStyleTag Pieces",
                         subtitle = "You don't have any garments tagged as $selectedStyleTag yet. Try switching to 'All Styles' or digitize a new piece.",
                         primaryButtonText = "Show All Styles",
-                        onPrimaryClick = { selectedStyleTag = "All Styles" },
+                        onPrimaryClick = { viewModel.updateClosetStyleTagFilter("All Styles") },
                         secondaryButtonText = "Digitize New Piece",
                         onSecondaryClick = onNavigateToDigitizer
                     )
@@ -428,7 +451,7 @@ fun WardrobeClosetScreen(
                         primaryButtonText = "Digitize New Piece",
                         onPrimaryClick = onNavigateToDigitizer,
                         secondaryButtonText = "Show All Garments",
-                        onSecondaryClick = { selectedFilter = "All" }
+                        onSecondaryClick = { viewModel.updateClosetCategoryFilter("All") }
                     )
                 }
             }

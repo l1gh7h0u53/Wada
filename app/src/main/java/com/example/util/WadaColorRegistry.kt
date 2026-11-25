@@ -190,8 +190,23 @@ object WadaColorRegistry {
     }
 
     /**
+     * Builds a compact searchable label cached directly inside SQLite for offline color queries.
+     */
+    fun buildSearchableWadaLabel(garmentHex: String, wadaColors: List<WadaColor>): String {
+        val closest = findClosestTraditionalColor(garmentHex, wadaColors)
+        return listOf(
+            closest.wadaName,
+            closest.japaneseRomaji,
+            closest.japaneseKanji,
+            closest.englishMeaning,
+            closest.colorFamily
+        ).filter { it.isNotBlank() }.distinct().joinToString(" • ")
+    }
+
+    /**
      * Determines whether a garment's color matches a user's Wada color search query.
      * Matches across:
+     * - Direct hex code (e.g. "#1E2C3D" or "1E2C3D")
      * - Wada dictionary name (e.g. "Sienna", "Tyrian", "Hermosa", "Carmine", "Andover")
      * - Traditional Japanese romaji name (e.g. "Kon", "Ai", "Moegi", "Yamabuki", "Sumi", "Sakura", "Beni", "Asagi", "Fuji")
      * - Traditional Japanese kanji (e.g. "紺", "藍", "萌黄", "山吹", "墨", "桜", "紅", "浅葱", "藤")
@@ -206,6 +221,10 @@ object WadaColorRegistry {
     ): Boolean {
         val query = searchQuery.trim().lowercase()
         if (query.isEmpty()) return true
+
+        if (garmentHex.lowercase().contains(query)) {
+            return true
+        }
 
         val closest = findClosestTraditionalColor(garmentHex, wadaColors)
 

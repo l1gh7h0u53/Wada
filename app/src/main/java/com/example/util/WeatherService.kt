@@ -40,7 +40,8 @@ data class WeatherInfo(
     val temperatureCelsius: Double,
     val condition: WeatherCondition,
     val windSpeedKmh: Double,
-    val fetchedAtMillis: Long = System.currentTimeMillis()
+    val fetchedAtMillis: Long = System.currentTimeMillis(),
+    val isFromCache: Boolean = false
 ) {
     val formattedTemperature: String
         get() {

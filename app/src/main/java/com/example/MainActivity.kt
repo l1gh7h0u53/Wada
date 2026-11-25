@@ -21,7 +21,11 @@ class MainActivity : ComponentActivity() {
 
         // Initialize Room local database and repository layers
         val database = AppDatabase.getDatabase(applicationContext)
-        val repository = ClothingRepository(database.clothingDao(), applicationContext)
+        val repository = ClothingRepository(
+            clothingDao = database.clothingDao(),
+            context = applicationContext,
+            localCacheDao = database.localCacheDao()
+        )
         val factory = WardrobeViewModelFactory(repository)
 
         setContent {

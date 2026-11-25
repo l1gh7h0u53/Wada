@@ -16,17 +16,22 @@ import com.example.data.WadaCombination
 import com.example.util.ColorGroupClassifier
 import com.example.util.ColorMatcher
 import com.example.util.ColorUtils
+import com.example.util.NetworkStatusObserver
+import com.example.util.StyleTagHelper
+import com.example.util.WadaColorRegistry
 import com.example.util.WeatherGarmentMatch
 import com.example.util.WeatherInfo
 import com.example.util.WeatherOutfitAdvisor
 import com.example.util.WeatherService
 import com.example.util.WeatherState
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -84,8 +89,69 @@ class WardrobeViewModel(
     private val _weatherState = MutableStateFlow<WeatherState>(WeatherState.Disabled)
     val weatherState: StateFlow<WeatherState> = _weatherState.asStateFlow()
 
+    // Reactive offline state via ConnectivityManager (false = online, true = offline)
+    private val _isOffline = MutableStateFlow(false)
+    val isOffline: StateFlow<Boolean> = _isOffline.asStateFlow()
+    private var networkObserverJob: Job? = null
+
+    // Persistent Closet filter state backed by SQLite Room queries
+    private val _closetFilter = MutableStateFlow(ClosetFilterState())
+    val closetFilter: StateFlow<ClosetFilterState> = _closetFilter.asStateFlow()
+
+    /**
+     * SQLite Room-backed primary color group counts for offline filter pills.
+     */
+    val colorGroupCounts: StateFlow<Map<String, Int>> = repository.colorGroupCounts
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyMap()
+        )
+
+    /**
+     * Offline-first Closet list: filters by category, favorites, and primary color group directly
+     * inside SQLite Room (`clothing_items` indexes), then applies local Wada perceptual search
+     * and style-tag filtering from cached data with zero network requirement.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val filteredClosetClothing: StateFlow<List<ClothingItem>> = combine(
+        _closetFilter,
+        _wadaColors
+    ) { filter, colors -> filter to colors }
+        .flatMapLatest { (filter, colors) ->
+            repository.observeFilteredWardrobe(
+                category = filter.category,
+                colorGroup = filter.colorGroup,
+                query = ""
+            ).combine(MutableStateFlow(filter to colors)) { dbItems, (activeFilter, wadaList) ->
+                dbItems.filter { item ->
+                    val matchesStyle = StyleTagHelper.matchesStyleTag(item, activeFilter.styleTag, wadaList)
+                    val matchesColor = if (activeFilter.colorQuery.isBlank()) {
+                        true
+                    } else {
+                        val directSqlTextMatch = item.wadaColorName.contains(activeFilter.colorQuery, ignoreCase = true) ||
+                            item.colorGroup.contains(activeFilter.colorQuery, ignoreCase = true) ||
+                            item.hexColor.contains(activeFilter.colorQuery, ignoreCase = true)
+                        directSqlTextMatch || WadaColorRegistry.matchesWadaColorSearch(
+                            item.hexColor,
+                            activeFilter.colorQuery,
+                            wadaList
+                        )
+                    }
+                    matchesStyle && matchesColor
+                }
+            }
+        }
+        .flowOn(kotlinx.coroutines.Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
     // Track garment IDs already checked during this session to avoid repeated image decoding
-    private val autoTaggedSessionIds = mutableSetOf<Int>()
+    private val autoTaggedGroupIds = mutableSetOf<Int>()
+    private val autoTaggedWadaIds = mutableSetOf<Int>()
 
     /**
      * Daily Style Inspiration derived reactively from Sanzo Wada's dictionary, the user's
@@ -115,32 +181,81 @@ class WardrobeViewModel(
             _categories.value = repository.getCategories()
         }
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            _weatherEnabled.value = repository.getWeatherSuggestionsEnabled()
-        }
-        // Automatically tag any existing wardrobe items missing a primary color group from their saved imagery
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            repository.allClothing.collect { items ->
-                for (item in items) {
-                    if (item.colorGroup.isBlank() && autoTaggedSessionIds.add(item.id)) {
-                        val (_, group) = ColorGroupClassifier.analyzeSavedImagery(item.filePath, item.hexColor)
-                        repository.updateColorGroup(item.id, group.label)
-                    }
+            val enabled = repository.getWeatherSuggestionsEnabled()
+            _weatherEnabled.value = enabled
+            if (enabled) {
+                repository.getCachedWeatherInfo()?.let { cached ->
+                    _weatherState.value = WeatherState.Ready(cached)
                 }
             }
         }
-        // Load Wada colors and combinations from assets on IO thread to prevent ANR
+        // Load Wada dictionary colors from Room cache / local JSON assets and backfill garment color metadata
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val colors = repository.loadWadaColors()
             _wadaColors.value = colors
             val list = repository.loadWadaCombinations()
             _wadaCombinations.value = list
             if (list.isNotEmpty()) {
-                // Default to first combination to start the dynamic Monet theming
                 val first = list.first()
                 _selectedCombination.value = first
                 recordPaletteExploration(first)
             }
         }
+        // Automatically tag any existing wardrobe items missing primary color group or cached Wada color label
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            combine(repository.allClothing, _wadaColors) { items, colors -> items to colors }
+                .collect { (items, colors) ->
+                    for (item in items) {
+                        val shouldBackfillGroup = item.colorGroup.isBlank() && autoTaggedGroupIds.add(item.id)
+                        val shouldBackfillWada = item.wadaColorName.isBlank() && colors.isNotEmpty() && autoTaggedWadaIds.add(item.id)
+                        if (shouldBackfillGroup || shouldBackfillWada) {
+                            val (resolvedHex, group) = if (item.colorGroup.isBlank()) {
+                                ColorGroupClassifier.analyzeSavedImagery(item.filePath, item.hexColor)
+                            } else {
+                                item.hexColor to (com.example.util.PrimaryColorGroup.fromLabel(item.colorGroup)
+                                    ?: ColorGroupClassifier.classifyHex(item.hexColor))
+                            }
+                            val wadaLabel = if (colors.isNotEmpty()) {
+                                WadaColorRegistry.buildSearchableWadaLabel(resolvedHex, colors)
+                            } else {
+                                item.wadaColorName
+                            }
+                            repository.updateColorMetadata(item.id, group.label, wadaLabel)
+                        }
+                    }
+                }
+        }
+    }
+
+    fun startNetworkMonitoring(context: Context) {
+        if (networkObserverJob != null) return
+        val appContext = context.applicationContext
+        _isOffline.value = !NetworkStatusObserver.isCurrentlyOnline(appContext)
+        networkObserverJob = viewModelScope.launch {
+            NetworkStatusObserver.observeIsOnline(appContext).collect { online ->
+                _isOffline.value = !online
+            }
+        }
+    }
+
+    fun updateClosetCategoryFilter(category: String) {
+        _closetFilter.value = _closetFilter.value.copy(category = category)
+    }
+
+    fun updateClosetColorGroupFilter(colorGroup: String) {
+        _closetFilter.value = _closetFilter.value.copy(colorGroup = colorGroup)
+    }
+
+    fun updateClosetColorQuery(query: String) {
+        _closetFilter.value = _closetFilter.value.copy(colorQuery = query)
+    }
+
+    fun updateClosetStyleTagFilter(styleTag: String) {
+        _closetFilter.value = _closetFilter.value.copy(styleTag = styleTag)
+    }
+
+    fun resetClosetFilters() {
+        _closetFilter.value = ClosetFilterState(category = _closetFilter.value.category)
     }
 
     /**
@@ -263,11 +378,13 @@ class WardrobeViewModel(
         _weatherState.value = WeatherState.Disabled
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             repository.setWeatherSuggestionsEnabled(false)
+            repository.clearWeatherCache()
         }
     }
 
     /**
      * Fetches current weather only if the user has explicitly opted in.
+     * Falls back to the Room SQLite cached weather snapshot when offline or unreachable.
      */
     fun fetchWeatherIfEnabled(context: Context, forceRefresh: Boolean = false) {
         if (!_weatherEnabled.value) {
@@ -279,16 +396,43 @@ class WardrobeViewModel(
             return
         }
         val currentReady = _weatherState.value as? WeatherState.Ready
-        if (!forceRefresh && currentReady != null &&
+        if (!forceRefresh && currentReady != null && !currentReady.info.isFromCache &&
             (System.currentTimeMillis() - currentReady.info.fetchedAtMillis) < 15 * 60 * 1000L
         ) {
             return
         }
         if (_weatherState.value is WeatherState.Loading) return
 
+        // If offline, serve the SQLite cached weather immediately without waiting on network timeout
+        if (!NetworkStatusObserver.isCurrentlyOnline(context.applicationContext)) {
+            _isOffline.value = true
+            viewModelScope.launch {
+                val cached = repository.getCachedWeatherInfo()
+                _weatherState.value = if (cached != null) {
+                    WeatherState.Ready(cached)
+                } else {
+                    WeatherState.Error("Offline — no cached weather available yet.")
+                }
+            }
+            return
+        }
+
         _weatherState.value = WeatherState.Loading
         viewModelScope.launch {
-            _weatherState.value = WeatherService.fetchLocalWeather(context)
+            when (val result = WeatherService.fetchLocalWeather(context)) {
+                is WeatherState.Ready -> {
+                    repository.saveWeatherCache(result.info)
+                    _weatherState.value = result
+                }
+                else -> {
+                    val cached = repository.getCachedWeatherInfo()
+                    _weatherState.value = if (cached != null) {
+                        WeatherState.Ready(cached)
+                    } else {
+                        result
+                    }
+                }
+            }
         }
     }
 
@@ -519,13 +663,16 @@ class WardrobeViewModel(
                 bitmap.recycle() // Recycle original bitmap immediately
 
                 val (analyzedHex, colorGroup) = ColorGroupClassifier.analyzeSavedImagery(path, dominantHex)
+                val cachedColors = _wadaColors.value.ifEmpty { repository.loadWadaColors() }
+                val wadaLabel = WadaColorRegistry.buildSearchableWadaLabel(analyzedHex, cachedColors)
 
                 // 3. Save to Room database
                 val item = ClothingItem(
                     filePath = path,
                     category = category,
                     hexColor = analyzedHex,
-                    colorGroup = colorGroup.label
+                    colorGroup = colorGroup.label,
+                    wadaColorName = wadaLabel
                 )
                 repository.insertClothing(item)
                 _selectedGarment.value = item
@@ -556,13 +703,16 @@ class WardrobeViewModel(
                 // 2. Save file to private storage (save as PNG to retain transparency if background is removed)
                 val path = saveBitmapToInternalStorage(context, bitmap, isPng = true)
                 val (analyzedHex, colorGroup) = ColorGroupClassifier.analyzeSavedImagery(path, dominantHex)
+                val cachedColors = _wadaColors.value.ifEmpty { repository.loadWadaColors() }
+                val wadaLabel = WadaColorRegistry.buildSearchableWadaLabel(analyzedHex, cachedColors)
 
                 // 3. Save to Room database
                 val item = ClothingItem(
                     filePath = path,
                     category = category,
                     hexColor = analyzedHex,
-                    colorGroup = colorGroup.label
+                    colorGroup = colorGroup.label,
+                    wadaColorName = wadaLabel
                 )
                 repository.insertClothing(item)
                 _selectedGarment.value = item
@@ -636,11 +786,15 @@ class WardrobeViewModel(
                 val path = saveBitmapToInternalStorage(context, bitmap)
                 bitmap.recycle() // Recycle virtual placeholder bitmap immediately
 
+                val cachedColors = _wadaColors.value.ifEmpty { repository.loadWadaColors() }
+                val wadaLabel = WadaColorRegistry.buildSearchableWadaLabel(hexColor, cachedColors)
+
                 val item = ClothingItem(
                     filePath = path,
                     category = category,
                     hexColor = hexColor,
-                    colorGroup = ColorGroupClassifier.classifyHex(hexColor).label
+                    colorGroup = ColorGroupClassifier.classifyHex(hexColor).label,
+                    wadaColorName = wadaLabel
                 )
                 repository.insertClothing(item)
                 _selectedGarment.value = item
@@ -769,19 +923,23 @@ class WardrobeViewModel(
                 }
 
                 val updatedColorGroup = ColorGroupClassifier.classifyHex(normalizedHex).label
+                val cachedColors = _wadaColors.value.ifEmpty { repository.loadWadaColors() }
+                val updatedWadaLabel = WadaColorRegistry.buildSearchableWadaLabel(normalizedHex, cachedColors)
                 repository.updateClothingColorAndPath(
                     id = item.id,
                     hexColor = normalizedHex,
                     filePath = finalPath,
                     colorGroup = updatedColorGroup,
-                    thermalType = normalizedThermal
+                    thermalType = normalizedThermal,
+                    wadaColorName = updatedWadaLabel
                 )
 
                 val updatedItem = item.copy(
                     hexColor = normalizedHex,
                     filePath = finalPath,
                     colorGroup = updatedColorGroup,
-                    thermalType = normalizedThermal
+                    thermalType = normalizedThermal,
+                    wadaColorName = updatedWadaLabel
                 )
                 if (_selectedGarment.value?.id == item.id) {
                     _selectedGarment.value = updatedItem
@@ -851,6 +1009,13 @@ data class OutfitRecommendation(
     val bottom: ClothingItem?,
     val shoes: ClothingItem?,
     val accessory: ClothingItem?
+)
+
+data class ClosetFilterState(
+    val category: String = "All",
+    val colorGroup: String = "All",
+    val colorQuery: String = "",
+    val styleTag: String = "All Styles"
 )
 
 data class DailyInspirationState(

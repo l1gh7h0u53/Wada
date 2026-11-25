@@ -41,7 +41,7 @@ class ExampleRobolectricTest {
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        val repository = ClothingRepository(db.clothingDao(), context)
+        val repository = ClothingRepository(db.clothingDao(), context, db.localCacheDao())
         viewModel = WardrobeViewModel(repository)
     }
 
