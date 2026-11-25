@@ -41,4 +41,21 @@ class ExampleUnitTest {
     assertEquals(nov25First.id, nov25Second.id)
     assertNotEquals(nov25First.id, nov26.id)
   }
+
+  @Test
+  fun exactColorAndRotationNormalization_isConsistent() {
+    fun normalizeRotation(deg: Int): Int = ((deg % 360) + 360) % 360
+
+    assertEquals(0, normalizeRotation(0))
+    assertEquals(90, normalizeRotation(90))
+    assertEquals(270, normalizeRotation(-90))
+    assertEquals(0, normalizeRotation(360))
+    assertEquals(180, normalizeRotation(540))
+
+    val parsed = com.example.util.ColorUtils.parseSafeColor("#4e6d53")
+    assertEquals("#4E6D53", com.example.util.ColorUtils.toHexString(parsed))
+
+    val shorthand = com.example.util.ColorUtils.parseSafeColor("abc")
+    assertEquals("#AABBCC", com.example.util.ColorUtils.toHexString(shorthand))
+  }
 }

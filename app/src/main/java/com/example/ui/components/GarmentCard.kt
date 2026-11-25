@@ -6,9 +6,10 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -28,9 +29,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
@@ -66,6 +69,7 @@ import com.example.util.TraditionalWadaColor
  * @param onDeleteClick Optional callback to delete the item
  * @param traditionalColor Resolved traditional Sanzo Wada color identity
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GarmentCard(
     item: ClothingItem,
@@ -73,9 +77,11 @@ fun GarmentCard(
     onClick: () -> Unit,
     onToggleFavorite: (ClothingItem) -> Unit,
     onDeleteClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     traditionalColor: TraditionalWadaColor? = null,
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
     val garmentColor = ColorUtils.parseSafeColor(item.hexColor)
     val textColor = ColorUtils.getContrastingTextColor(garmentColor)
 
@@ -202,10 +208,17 @@ fun GarmentCard(
                         }
                     )
                 }
-                .clickable(
+                .combinedClickable(
                     interactionSource = interactionSource,
                     indication = ripple(bounded = true),
-                    onClick = onClick
+                    onClick = onClick,
+                    onLongClick = if (onLongClick != null) {
+                        {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onLongClick()
+                        }
+                    } else null,
+                    onLongClickLabel = if (onLongClick != null) "Edit color and rotation" else null
                 ),
             shape = WadaShapes.OutfitPieceShape,
             colors = CardDefaults.cardColors(

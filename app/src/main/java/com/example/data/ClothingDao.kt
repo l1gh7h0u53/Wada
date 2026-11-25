@@ -22,4 +22,7 @@ interface ClothingDao {
 
     @Query("UPDATE clothing_items SET isFavorite = :isFavorite WHERE id = :id")
     suspend fun updateFavorite(id: Int, isFavorite: Boolean)
+
+    @Query("UPDATE clothing_items SET hexColor = :hexColor, filePath = :filePath WHERE id = :id")
+    suspend fun updateColorAndFilePath(id: Int, hexColor: String, filePath: String)
 }

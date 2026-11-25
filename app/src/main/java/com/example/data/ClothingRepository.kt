@@ -37,6 +37,12 @@ class ClothingRepository(
         }
     }
 
+    suspend fun updateClothingColorAndPath(id: Int, hexColor: String, filePath: String) {
+        withContext(Dispatchers.IO) {
+            clothingDao.updateColorAndFilePath(id, hexColor, filePath)
+        }
+    }
+
     fun getThemeSetting(): String {
         val prefs = context.getSharedPreferences("wada_settings", Context.MODE_PRIVATE)
         return prefs.getString("theme_preference", "SYSTEM") ?: "SYSTEM"

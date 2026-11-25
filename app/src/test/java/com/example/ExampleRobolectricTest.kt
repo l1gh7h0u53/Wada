@@ -314,5 +314,57 @@ class ExampleRobolectricTest {
         // With nothing logged in the closet, Daily Style Inspiration does not appear
         composeTestRule.onNodeWithTag("daily_style_inspiration_card").assertDoesNotExist()
     }
+
+    @Test
+    fun testEditGarmentDialogRotationAndExactColor() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val tempFile = java.io.File(context.cacheDir, "test_garment.png")
+        val bmp = android.graphics.Bitmap.createBitmap(120, 80, android.graphics.Bitmap.Config.ARGB_8888)
+        bmp.eraseColor(android.graphics.Color.parseColor("#1E2C3D"))
+        java.io.FileOutputStream(tempFile).use { out ->
+            bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+        }
+        bmp.recycle()
+
+        val item = com.example.data.ClothingItem(
+            id = 42,
+            filePath = tempFile.absolutePath,
+            category = "Tops",
+            hexColor = "#1E2C3D"
+        )
+
+        var savedHex: String? = null
+        var savedRotation: Int? = null
+
+        composeTestRule.setContent {
+            com.example.ui.screens.dialogs.EditGarmentDialog(
+                item = item,
+                wadaColors = emptyList(),
+                onDismiss = {},
+                onSave = { hex, rot ->
+                    savedHex = hex
+                    savedRotation = rot
+                }
+            )
+        }
+        composeTestRule.waitForIdle()
+
+        // Rotate +90 degrees right
+        composeTestRule.onNodeWithTag("edit_garment_rotate_right_btn").performClick()
+        composeTestRule.waitForIdle()
+
+        // Edit exact hex color
+        composeTestRule.onNodeWithTag("edit_garment_hex_input").performClick()
+        composeTestRule.onNode(androidx.compose.ui.test.hasTestTag("edit_garment_hex_input"))
+            .performTextInput("")
+
+        // Save changes
+        composeTestRule.onNodeWithTag("edit_garment_save_btn").performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals("#1E2C3D", savedHex)
+        assertEquals(90, savedRotation)
+        tempFile.delete()
+    }
 }
 

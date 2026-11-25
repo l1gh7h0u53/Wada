@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Matrix
 import android.graphics.Paint
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -13,6 +14,7 @@ import com.example.data.ClothingRepository
 import com.example.data.WadaColor
 import com.example.data.WadaCombination
 import com.example.util.ColorMatcher
+import com.example.util.ColorUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -611,6 +613,80 @@ class WardrobeViewModel(
         }
     }
 
+    /**
+     * Persist an edited exact hex color and optional photo rotation (in degrees, multiples of 90)
+     * for a closet garment. When rotated, saves a newly rotated bitmap file so Coil refreshes
+     * immediately and intrinsic aspect ratio updates across all cards.
+     */
+    fun updateGarmentColorAndRotation(
+        context: Context,
+        item: ClothingItem,
+        newHexColor: String,
+        rotationDegrees: Int,
+        onComplete: () -> Unit = {}
+    ) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val normalizedHex = ColorUtils.toHexString(ColorUtils.parseSafeColor(newHexColor))
+                val normalizedRotation = ((rotationDegrees % 360) + 360) % 360
+                var finalPath = item.filePath
+
+                if (normalizedRotation != 0 && item.filePath.isNotBlank()) {
+                    val sourceFile = File(item.filePath)
+                    if (sourceFile.exists() && sourceFile.length() > 0L) {
+                        val decoded = BitmapFactory.decodeFile(sourceFile.absolutePath)
+                        if (decoded != null) {
+                            val matrix = Matrix().apply {
+                                postRotate(normalizedRotation.toFloat())
+                            }
+                            val rotatedBitmap = Bitmap.createBitmap(
+                                decoded,
+                                0,
+                                0,
+                                decoded.width,
+                                decoded.height,
+                                matrix,
+                                true
+                            )
+                            val isPng = sourceFile.extension.equals("png", ignoreCase = true)
+                            val newPath = saveBitmapToInternalStorage(context, rotatedBitmap, isPng = isPng)
+                            if (rotatedBitmap != decoded) {
+                                rotatedBitmap.recycle()
+                            }
+                            decoded.recycle()
+
+                            if (newPath != sourceFile.absolutePath && File(newPath).exists()) {
+                                finalPath = newPath
+                                try {
+                                    sourceFile.delete()
+                                } catch (_: Exception) {
+                                }
+                            }
+                        }
+                    }
+                }
+
+                repository.updateClothingColorAndPath(
+                    id = item.id,
+                    hexColor = normalizedHex,
+                    filePath = finalPath
+                )
+
+                val updatedItem = item.copy(hexColor = normalizedHex, filePath = finalPath)
+                if (_selectedGarment.value?.id == item.id) {
+                    _selectedGarment.value = updatedItem
+                    matchWadaAndRecommend(updatedItem)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onComplete()
+                }
+            }
+        }
+    }
+
     // --- Helper math/file functions ---
 
     private fun extractDominantColorFromBitmap(bitmap: Bitmap): String {
@@ -644,13 +720,14 @@ class WardrobeViewModel(
 
     private fun saveBitmapToInternalStorage(context: Context, bitmap: Bitmap, isPng: Boolean = false): String {
         val extension = if (isPng) "png" else "jpg"
-        val filename = "garment_${System.currentTimeMillis()}.$extension"
+        val uniqueSuffix = "${System.currentTimeMillis()}_${System.nanoTime() % 100000}"
+        val filename = "garment_$uniqueSuffix.$extension"
         val file = File(context.filesDir, filename)
         FileOutputStream(file).use { out ->
             if (isPng) {
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
             } else {
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
             }
         }
         return file.absolutePath

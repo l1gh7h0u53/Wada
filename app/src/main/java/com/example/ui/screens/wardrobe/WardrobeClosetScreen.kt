@@ -36,10 +36,12 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import android.widget.Toast
 import com.example.data.ClothingItem
 import com.example.ui.components.GarmentCard
 import com.example.ui.components.MinimalistGalleryEmptyState
 import com.example.ui.screens.dialogs.AddGarmentDialog
+import com.example.ui.screens.dialogs.EditGarmentDialog
 import com.example.ui.theme.WadaShapes
 import com.example.util.ColorLoreInfo
 import com.example.util.ColorUtils
@@ -87,6 +89,7 @@ fun WardrobeClosetScreen(
     var showColorLore by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var itemPendingDelete by remember { mutableStateOf<ClothingItem?>(null) }
+    var itemPendingEdit by remember { mutableStateOf<ClothingItem?>(null) }
 
     // LazyGrid scroll state
     val gridState = rememberLazyGridState()
@@ -390,6 +393,15 @@ fun WardrobeClosetScreen(
                 }
             }
         } else {
+            Text(
+                text = "Hold any garment to edit exact color & photo rotation",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                modifier = Modifier
+                    .padding(bottom = 6.dp)
+                    .testTag("closet_long_press_hint")
+            )
+
             LazyVerticalGrid(
                 state = gridState,
                 columns = GridCells.Fixed(2),
@@ -421,6 +433,7 @@ fun WardrobeClosetScreen(
                         onClick = { viewModel.selectGarment(item) },
                         onToggleFavorite = { viewModel.toggleFavorite(it) },
                         onDeleteClick = { itemPendingDelete = item },
+                        onLongClick = { itemPendingEdit = item },
                         traditionalColor = itemWadaColors[item.id],
                         modifier = Modifier
                             .animateItem()
@@ -487,6 +500,26 @@ fun WardrobeClosetScreen(
                     shape = CircleShape
                 ) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Long-press Edit Garment Dialog (exact color & picture rotation)
+    itemPendingEdit?.let { item ->
+        EditGarmentDialog(
+            item = item,
+            wadaColors = wadaColors,
+            onDismiss = { itemPendingEdit = null },
+            onSave = { newHex, rotationDegrees ->
+                viewModel.updateGarmentColorAndRotation(
+                    context = context,
+                    item = item,
+                    newHexColor = newHex,
+                    rotationDegrees = rotationDegrees
+                ) {
+                    itemPendingEdit = null
+                    Toast.makeText(context, "Updated garment color & photo", Toast.LENGTH_SHORT).show()
                 }
             }
         )
