@@ -1,5 +1,8 @@
 package com.example.ui.screens.outfit
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -45,6 +48,7 @@ import com.example.ui.theme.WadaShapes
 import com.example.util.ColorMatcher
 import com.example.util.ColorUtils
 import com.example.util.PaletteExportHelper
+import com.example.util.WeatherService
 import com.example.viewmodel.OutfitRecommendation
 import com.example.viewmodel.WardrobeViewModel
 
@@ -77,6 +81,30 @@ fun OutfitCanvasScreen(
     val selectedGarment by viewModel.selectedGarment.collectAsState()
     val recommendation by viewModel.outfitRecommendations.collectAsState()
     val themeSetting by viewModel.themeSetting.collectAsState()
+    val weatherEnabled by viewModel.weatherEnabled.collectAsState()
+    val weatherState by viewModel.weatherState.collectAsState()
+
+    val coarseLocationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.enableWeatherSuggestions(context)
+        } else {
+            viewModel.disableWeatherSuggestions()
+            Toast.makeText(
+                context,
+                "Location declined — weather matches stay off.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    // Only fetch weather if the user has already opted in
+    LaunchedEffect(weatherEnabled, dailyInspiration != null) {
+        if (weatherEnabled && dailyInspiration != null) {
+            viewModel.fetchWeatherIfEnabled(context)
+        }
+    }
 
     var showHarmonyInfoDialog by remember { mutableStateOf(false) }
     val wadaColors by viewModel.wadaColors.collectAsState()
@@ -206,6 +234,27 @@ fun OutfitCanvasScreen(
                         Toast.makeText(
                             context,
                             "Applied Daily Palette No. ${dailyState.combination.id}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    weatherEnabled = weatherEnabled,
+                    weatherState = weatherState,
+                    weatherMatches = dailyState.weatherMatches,
+                    weatherAdvice = dailyState.weatherAdvice,
+                    onEnableWeather = {
+                        if (WeatherService.hasCoarseLocationPermission(context)) {
+                            viewModel.enableWeatherSuggestions(context)
+                        } else {
+                            coarseLocationLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                        }
+                    },
+                    onRefreshWeather = { viewModel.fetchWeatherIfEnabled(context, forceRefresh = true) },
+                    onDisableWeather = { viewModel.disableWeatherSuggestions() },
+                    onSelectMatchedGarment = { item ->
+                        viewModel.selectGarment(item)
+                        Toast.makeText(
+                            context,
+                            "Anchored ${item.category} (${item.hexColor})",
                             Toast.LENGTH_SHORT
                         ).show()
                     }

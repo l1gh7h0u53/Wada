@@ -19,8 +19,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.outlined.Checkroom
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -48,6 +50,8 @@ import java.io.File
 import kotlin.math.roundToInt
 
 import androidx.compose.ui.text.style.TextOverflow
+import com.example.util.ColorGroupClassifier
+import com.example.util.PrimaryColorGroup
 import com.example.util.TraditionalWadaColor
 
 /**
@@ -313,6 +317,44 @@ fun GarmentCard(
                             )
                         }
                     }
+
+                    // Weather Fit Badge (Warm / Light) in bottom-start corner if tagged
+                    if (item.thermalType.equals("WARM", ignoreCase = true) ||
+                        item.thermalType.equals("LIGHT", ignoreCase = true)
+                    ) {
+                        val isWarm = item.thermalType.equals("WARM", ignoreCase = true)
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+                            border = BorderStroke(
+                                0.5.dp,
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            ),
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(6.dp)
+                                .testTag("garment_thermal_badge_${item.id}")
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isWarm) Icons.Filled.Whatshot else Icons.Outlined.WbSunny,
+                                    contentDescription = null,
+                                    tint = if (isWarm) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = if (isWarm) "Warm" else "Light",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -360,14 +402,54 @@ fun GarmentCard(
                     }
                 }
 
-                // Traditional Wada Color Name Badge
-                traditionalColor?.let { trad ->
-                    Spacer(modifier = Modifier.height(7.dp))
+                // Traditional Wada Color Name + Auto-Tagged Primary Color Group Row
+                val resolvedGroupName = item.colorGroup.ifBlank {
+                    ColorGroupClassifier.classifyHex(item.hexColor).label
+                }
+                val resolvedGroupSwatch = PrimaryColorGroup.fromLabel(resolvedGroupName)?.swatchHex ?: item.hexColor
+
+                Spacer(modifier = Modifier.height(7.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    traditionalColor?.let { trad ->
+                        Surface(
+                            shape = WadaShapes.FilterPill,
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.75f),
+                            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(ColorUtils.parseSafeColor(trad.hex))
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "${trad.wadaName} • ${trad.japaneseKanji}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+
+                    // Primary Color Group Auto-Tag Pill
                     Surface(
                         shape = WadaShapes.FilterPill,
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.75f),
-                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                        modifier = Modifier.fillMaxWidth()
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f),
+                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                        modifier = Modifier.testTag("garment_color_group_tag_${item.id}")
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -377,16 +459,15 @@ fun GarmentCard(
                                 modifier = Modifier
                                     .size(7.dp)
                                     .clip(CircleShape)
-                                    .background(ColorUtils.parseSafeColor(trad.hex))
+                                    .background(ColorUtils.parseSafeColor(resolvedGroupSwatch))
                             )
-                            Spacer(modifier = Modifier.width(5.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "${trad.wadaName} • ${trad.japaneseKanji}",
+                                text = resolvedGroupName,
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                maxLines = 1
                             )
                         }
                     }

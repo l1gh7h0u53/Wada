@@ -37,9 +37,21 @@ class ClothingRepository(
         }
     }
 
-    suspend fun updateClothingColorAndPath(id: Int, hexColor: String, filePath: String) {
+    suspend fun updateClothingColorAndPath(
+        id: Int,
+        hexColor: String,
+        filePath: String,
+        colorGroup: String,
+        thermalType: String
+    ) {
         withContext(Dispatchers.IO) {
-            clothingDao.updateColorAndFilePath(id, hexColor, filePath)
+            clothingDao.updateColorAndFilePath(id, hexColor, filePath, colorGroup, thermalType)
+        }
+    }
+
+    suspend fun updateColorGroup(id: Int, colorGroup: String) {
+        withContext(Dispatchers.IO) {
+            clothingDao.updateColorGroup(id, colorGroup)
         }
     }
 
@@ -72,6 +84,16 @@ class ClothingRepository(
     fun saveCategories(categories: List<String>) {
         val prefs = context.getSharedPreferences("wada_settings", Context.MODE_PRIVATE)
         prefs.edit().putString("custom_categories", categories.joinToString(",")).apply()
+    }
+
+    fun getWeatherSuggestionsEnabled(): Boolean {
+        val prefs = context.getSharedPreferences("wada_settings", Context.MODE_PRIVATE)
+        return prefs.getBoolean("weather_suggestions_enabled", false)
+    }
+
+    fun setWeatherSuggestionsEnabled(enabled: Boolean) {
+        val prefs = context.getSharedPreferences("wada_settings", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("weather_suggestions_enabled", enabled).apply()
     }
 
 

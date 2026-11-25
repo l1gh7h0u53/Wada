@@ -43,8 +43,10 @@ import com.example.ui.components.MinimalistGalleryEmptyState
 import com.example.ui.screens.dialogs.AddGarmentDialog
 import com.example.ui.screens.dialogs.EditGarmentDialog
 import com.example.ui.theme.WadaShapes
+import com.example.util.ColorGroupClassifier
 import com.example.util.ColorLoreInfo
 import com.example.util.ColorUtils
+import com.example.util.PrimaryColorGroup
 import com.example.util.StyleTagHelper
 import com.example.util.WadaColorFilterPill
 import com.example.util.WadaColorLore
@@ -85,6 +87,7 @@ fun WardrobeClosetScreen(
 
     var selectedFilter by remember { mutableStateOf("All") }
     var selectedStyleTag by remember { mutableStateOf("All Styles") }
+    var selectedColorGroup by remember { mutableStateOf("All") }
     var colorSearchQuery by remember { mutableStateOf("") }
     var showColorLore by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -108,8 +111,15 @@ fun WardrobeClosetScreen(
         }
     }
 
-    // Filter items based on active category chip, style tag, and traditional Wada color query
-    val filteredList = remember(allClothing, selectedFilter, selectedStyleTag, colorSearchQuery, wadaColors) {
+    // Compute primary color group counts from all closet items
+    val colorGroupCounts = remember(allClothing) {
+        allClothing.groupingBy { item ->
+            item.colorGroup.ifBlank { ColorGroupClassifier.classifyHex(item.hexColor).label }
+        }.eachCount()
+    }
+
+    // Filter items based on active category chip, style tag, primary color group, and Wada color query
+    val filteredList = remember(allClothing, selectedFilter, selectedStyleTag, selectedColorGroup, colorSearchQuery, wadaColors) {
         allClothing.filter { item ->
             val matchesCategory = when (selectedFilter) {
                 "All" -> true
@@ -117,12 +127,15 @@ fun WardrobeClosetScreen(
                 else -> item.category.equals(selectedFilter, ignoreCase = true)
             }
             val matchesStyle = StyleTagHelper.matchesStyleTag(item, selectedStyleTag, wadaColors)
+            val itemGroup = item.colorGroup.ifBlank { ColorGroupClassifier.classifyHex(item.hexColor).label }
+            val matchesColorGroup = selectedColorGroup == "All" ||
+                itemGroup.equals(selectedColorGroup, ignoreCase = true)
             val matchesColor = if (colorSearchQuery.isBlank()) {
                 true
             } else {
                 WadaColorRegistry.matchesWadaColorSearch(item.hexColor, colorSearchQuery, wadaColors)
             }
-            matchesCategory && matchesStyle && matchesColor
+            matchesCategory && matchesStyle && matchesColorGroup && matchesColor
         }
     }
 
@@ -277,7 +290,16 @@ fun WardrobeClosetScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // 5. Category Filter Chips Row (Hero navigation: All, Favorites, Tops, Bottoms...)
+        // 5. Primary Color Group Auto-Tag Filter Chips Row
+        ColorGroupFilterRow(
+            selectedGroup = selectedColorGroup,
+            groupCounts = colorGroupCounts,
+            onGroupSelected = { selectedColorGroup = it }
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // 6. Category Filter Chips Row (Hero navigation: All, Favorites, Tops, Bottoms...)
         val filterOptions = listOf("All", "Favorites") + categories
         LazyGridFilterChips(
             options = filterOptions,
@@ -285,8 +307,8 @@ fun WardrobeClosetScreen(
             onSelectedChange = { selectedFilter = it }
         )
 
-        // 6. Active Filter Indicators feedback bar
-        if (colorSearchQuery.isNotBlank() || selectedStyleTag != "All Styles") {
+        // 7. Active Filter Indicators feedback bar
+        if (colorSearchQuery.isNotBlank() || selectedStyleTag != "All Styles" || selectedColorGroup != "All") {
             Spacer(modifier = Modifier.height(8.dp))
             Surface(
                 shape = WadaShapes.FilterPill,
@@ -305,11 +327,19 @@ fun WardrobeClosetScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                     ) {
+                        val activeFilterLabel = buildList {
+                            if (selectedColorGroup != "All") add("Group: $selectedColorGroup")
+                            if (colorSearchQuery.isNotBlank()) add("Tone: \"$colorSearchQuery\"")
+                            if (selectedStyleTag != "All Styles") add("Style: \"$selectedStyleTag\"")
+                        }.joinToString(" • ")
+
                         Text(
-                            text = if (colorSearchQuery.isNotBlank()) "Tone: \"$colorSearchQuery\"" else "Style: \"$selectedStyleTag\"",
+                            text = activeFilterLabel,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
@@ -329,6 +359,7 @@ fun WardrobeClosetScreen(
                             .clickable {
                                 colorSearchQuery = ""
                                 selectedStyleTag = "All Styles"
+                                selectedColorGroup = "All"
                                 showColorLore = false
                             }
                             .padding(horizontal = 6.dp, vertical = 2.dp)
@@ -356,6 +387,15 @@ fun WardrobeClosetScreen(
                         onPrimaryClick = onNavigateToDigitizer,
                         secondaryButtonText = null,
                         onSecondaryClick = null
+                    )
+                } else if (selectedColorGroup != "All") {
+                    MinimalistGalleryEmptyState(
+                        title = "No $selectedColorGroup Garments",
+                        subtitle = "No garments in your closet are tagged in the $selectedColorGroup color group under the current filters. Try another color group or show all colors.",
+                        primaryButtonText = "Show All Color Groups",
+                        onPrimaryClick = { selectedColorGroup = "All" },
+                        secondaryButtonText = "Digitize New Piece",
+                        onSecondaryClick = onNavigateToDigitizer
                     )
                 } else if (colorSearchQuery.isNotBlank()) {
                     MinimalistGalleryEmptyState(
@@ -511,15 +551,16 @@ fun WardrobeClosetScreen(
             item = item,
             wadaColors = wadaColors,
             onDismiss = { itemPendingEdit = null },
-            onSave = { newHex, rotationDegrees ->
+            onSave = { newHex, rotationDegrees, thermalType ->
                 viewModel.updateGarmentColorAndRotation(
                     context = context,
                     item = item,
                     newHexColor = newHex,
-                    rotationDegrees = rotationDegrees
+                    rotationDegrees = rotationDegrees,
+                    thermalType = thermalType
                 ) {
                     itemPendingEdit = null
-                    Toast.makeText(context, "Updated garment color & photo", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Updated garment details", Toast.LENGTH_SHORT).show()
                 }
             }
         )
@@ -653,17 +694,21 @@ private fun ColorLoreInfoPanel(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Surface(
-                        shape = WadaShapes.FilterPill,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                    if (lore.englishMeaning.isNotBlank() &&
+                        !lore.englishMeaning.startsWith("A Dictionary of Color Combinations", ignoreCase = true)
                     ) {
-                        Text(
-                            text = lore.englishMeaning,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = WadaShapes.FilterPill,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = lore.englishMeaning,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
 
@@ -782,6 +827,95 @@ private fun LazyGridFilterChips(
                     selectedBorderColor = MaterialTheme.colorScheme.primary
                 ),
                 modifier = Modifier.testTag("filter_chip_$option")
+            )
+        }
+    }
+}
+
+/**
+ * Scrollable primary color group filter row powered by imagery-based auto-tagging.
+ */
+@Composable
+private fun ColorGroupFilterRow(
+    selectedGroup: String,
+    groupCounts: Map<String, Int>,
+    onGroupSelected: (String) -> Unit
+) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("color_group_filter_row")
+    ) {
+        item {
+            val isAllSelected = selectedGroup == "All"
+            FilterChip(
+                selected = isAllSelected,
+                onClick = { onGroupSelected("All") },
+                label = {
+                    Text(
+                        text = "All Groups",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Medium
+                    )
+                },
+                shape = WadaShapes.FilterPill,
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = isAllSelected,
+                    borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    selectedBorderColor = MaterialTheme.colorScheme.tertiary
+                ),
+                modifier = Modifier.testTag("color_group_chip_All")
+            )
+        }
+
+        items(PrimaryColorGroup.entries) { group ->
+            val count = groupCounts[group.label] ?: 0
+            val isSelected = selectedGroup.equals(group.label, ignoreCase = true)
+            val labelText = if (count > 0) "${group.label} ($count)" else group.label
+
+            FilterChip(
+                selected = isSelected,
+                onClick = {
+                    onGroupSelected(if (isSelected) "All" else group.label)
+                },
+                label = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(ColorUtils.parseSafeColor(group.swatchHex))
+                                .border(
+                                    BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+                                    CircleShape
+                                )
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = labelText,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                },
+                shape = WadaShapes.FilterPill,
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = isSelected,
+                    borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (count > 0) 0.55f else 0.3f),
+                    selectedBorderColor = MaterialTheme.colorScheme.tertiary
+                ),
+                modifier = Modifier.testTag("color_group_chip_${group.label}")
             )
         }
     }

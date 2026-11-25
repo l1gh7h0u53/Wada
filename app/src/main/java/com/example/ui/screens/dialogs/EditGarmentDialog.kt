@@ -27,6 +27,8 @@ import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Colorize
+import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -70,7 +72,7 @@ fun EditGarmentDialog(
     item: ClothingItem,
     wadaColors: List<WadaColor>,
     onDismiss: () -> Unit,
-    onSave: (newHexColor: String, rotationDegrees: Int) -> Unit
+    onSave: (newHexColor: String, rotationDegrees: Int, thermalType: String) -> Unit
 ) {
     val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
@@ -98,6 +100,7 @@ fun EditGarmentDialog(
     var isHexError by remember(item.id) { mutableStateOf(false) }
 
     var rotationDegrees by remember(item.id) { mutableIntStateOf(0) }
+    var thermalType by remember(item.id) { mutableStateOf(item.thermalType) }
     var isSaving by remember(item.id) { mutableStateOf(false) }
 
     // Decoded garment picture (null if the garment has no photo file on disk)
@@ -640,6 +643,137 @@ fun EditGarmentDialog(
                         .testTag("edit_garment_hex_input")
                 )
 
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Weather Fit Toggle: Light (warm & normal weather) vs Warm (cold weather)
+                Text(
+                    text = "WEATHER FIT",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Choose Warm for cold weather, or Light for warm and normal weather.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    val isLightSelected = thermalType.equals("LIGHT", ignoreCase = true)
+                    val isWarmSelected = thermalType.equals("WARM", ignoreCase = true)
+
+                    FilledTonalButton(
+                        onClick = { thermalType = if (isLightSelected) "" else "LIGHT" },
+                        shape = CircleShape,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = if (isLightSelected) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainerHighest
+                            },
+                            contentColor = if (isLightSelected) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        ),
+                        border = BorderStroke(
+                            width = if (isLightSelected) 1.5.dp else 1.dp,
+                            color = if (isLightSelected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            }
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 54.dp)
+                            .testTag("edit_garment_thermal_light_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.WbSunny,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Column(horizontalAlignment = Alignment.Start) {
+                            Text(
+                                text = "Light",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = if (isLightSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                            Text(
+                                text = "Warm & normal",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isLightSelected) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                                }
+                            )
+                        }
+                    }
+
+                    FilledTonalButton(
+                        onClick = { thermalType = if (isWarmSelected) "" else "WARM" },
+                        shape = CircleShape,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = if (isWarmSelected) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainerHighest
+                            },
+                            contentColor = if (isWarmSelected) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        ),
+                        border = BorderStroke(
+                            width = if (isWarmSelected) 1.5.dp else 1.dp,
+                            color = if (isWarmSelected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            }
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 54.dp)
+                            .testTag("edit_garment_thermal_warm_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Whatshot,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Column(horizontalAlignment = Alignment.Start) {
+                            Text(
+                                text = "Warm",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = if (isWarmSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                            Text(
+                                text = "Cold weather",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isWarmSelected) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                                }
+                            )
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(18.dp))
 
                 // Footer Action Buttons (fully rounded pill corners)
@@ -662,7 +796,7 @@ fun EditGarmentDialog(
                         onClick = {
                             if (!isSaving && !isHexError) {
                                 isSaving = true
-                                onSave(currentHex, rotationDegrees)
+                                onSave(currentHex, rotationDegrees, thermalType)
                             }
                         },
                         enabled = !isSaving && !isHexError,

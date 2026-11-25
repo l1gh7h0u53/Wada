@@ -335,15 +335,17 @@ class ExampleRobolectricTest {
 
         var savedHex: String? = null
         var savedRotation: Int? = null
+        var savedThermal: String? = null
 
         composeTestRule.setContent {
             com.example.ui.screens.dialogs.EditGarmentDialog(
                 item = item,
                 wadaColors = emptyList(),
                 onDismiss = {},
-                onSave = { hex, rot ->
+                onSave = { hex, rot, thermal ->
                     savedHex = hex
                     savedRotation = rot
+                    savedThermal = thermal
                 }
             )
         }
@@ -351,6 +353,10 @@ class ExampleRobolectricTest {
 
         // Rotate +90 degrees right
         composeTestRule.onNodeWithTag("edit_garment_rotate_right_btn").performClick()
+        composeTestRule.waitForIdle()
+
+        // Toggle Weather Fit to Warm
+        composeTestRule.onNodeWithTag("edit_garment_thermal_warm_btn").performClick()
         composeTestRule.waitForIdle()
 
         // Edit exact hex color
@@ -364,6 +370,7 @@ class ExampleRobolectricTest {
 
         assertEquals("#1E2C3D", savedHex)
         assertEquals(90, savedRotation)
+        assertEquals("WARM", savedThermal)
         tempFile.delete()
     }
 }

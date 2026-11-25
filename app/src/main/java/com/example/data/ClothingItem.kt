@@ -10,5 +10,7 @@ data class ClothingItem(
     val category: String, // e.g. "Tops", "Bottoms", "Shoes", "Accessories"
     val hexColor: String, // Normalized hex color (e.g. "#4E6D53")
     val dateAdded: Long = System.currentTimeMillis(),
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    val colorGroup: String = "", // Auto-tagged primary color group (e.g. "Blue", "Green", "Black")
+    val thermalType: String = "" // Weather thermal fit: "WARM", "LIGHT", or "" (auto)
 )

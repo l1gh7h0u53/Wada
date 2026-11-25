@@ -180,7 +180,7 @@ object WadaColorLore {
                     title = "Sanzo Wada Color Philosophy",
                     kanji = "配色総鑑",
                     romaji = "Haishoku Sōkan",
-                    englishMeaning = "A Dictionary of Color Combinations (1930s)",
+                    englishMeaning = "",
                     era = "1930s Showa Modernism & Avant-Garde",
                     history = "Sanzo Wada (1883–1967), an Academy Award-winning designer and artist, revolutionized color theory by combining traditional Japanese aesthetic sensibilities (*Dento-iro*) with Western color science. His 346 palette harmonies explored bold two-, three-, and four-color combinations that transformed fashion, kimono, and industrial design.",
                     wadaStylingNote = "Wada believed that colors do not exist in isolation—harmony arises from the dynamic tension between saturation, area ratio, and seasonal context.",

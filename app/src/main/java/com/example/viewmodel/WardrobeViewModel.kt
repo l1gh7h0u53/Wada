@@ -13,8 +13,14 @@ import com.example.data.ClothingItem
 import com.example.data.ClothingRepository
 import com.example.data.WadaColor
 import com.example.data.WadaCombination
+import com.example.util.ColorGroupClassifier
 import com.example.util.ColorMatcher
 import com.example.util.ColorUtils
+import com.example.util.WeatherGarmentMatch
+import com.example.util.WeatherInfo
+import com.example.util.WeatherOutfitAdvisor
+import com.example.util.WeatherService
+import com.example.util.WeatherState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -71,16 +77,28 @@ class WardrobeViewModel(
     private val _categories = MutableStateFlow<List<String>>(listOf("Tops", "Bottoms", "Shoes", "Accessories"))
     val categories = _categories.asStateFlow()
 
+    // Opt-in local weather suggestions state (strictly disabled until user accepts)
+    private val _weatherEnabled = MutableStateFlow(false)
+    val weatherEnabled: StateFlow<Boolean> = _weatherEnabled.asStateFlow()
+
+    private val _weatherState = MutableStateFlow<WeatherState>(WeatherState.Disabled)
+    val weatherState: StateFlow<WeatherState> = _weatherState.asStateFlow()
+
+    // Track garment IDs already checked during this session to avoid repeated image decoding
+    private val autoTaggedSessionIds = mutableSetOf<Int>()
+
     /**
-     * Daily Style Inspiration derived reactively from Sanzo Wada's dictionary and the user's
-     * logged closet colors. Remains null until at least 2 distinct colors are logged in the closet,
-     * and exposes only colors present in the closet.
+     * Daily Style Inspiration derived reactively from Sanzo Wada's dictionary, the user's
+     * logged closet colors, and (when opted in) local weather conditions.
+     * Remains null until at least 2 distinct colors are logged in the closet.
      */
     val dailyInspiration: StateFlow<DailyInspirationState?> = combine(
         allClothing,
-        _wadaCombinations
-    ) { clothes, combinations ->
-        computeDailyInspiration(clothes, combinations)
+        _wadaCombinations,
+        _weatherState
+    ) { clothes, combinations, weather ->
+        val weatherInfo = (weather as? WeatherState.Ready)?.info
+        computeDailyInspiration(clothes, combinations, weatherInfo = weatherInfo)
     }.flowOn(kotlinx.coroutines.Dispatchers.Default)
      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -95,6 +113,20 @@ class WardrobeViewModel(
         }
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             _categories.value = repository.getCategories()
+        }
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            _weatherEnabled.value = repository.getWeatherSuggestionsEnabled()
+        }
+        // Automatically tag any existing wardrobe items missing a primary color group from their saved imagery
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            repository.allClothing.collect { items ->
+                for (item in items) {
+                    if (item.colorGroup.isBlank() && autoTaggedSessionIds.add(item.id)) {
+                        val (_, group) = ColorGroupClassifier.analyzeSavedImagery(item.filePath, item.hexColor)
+                        repository.updateColorGroup(item.id, group.label)
+                    }
+                }
+            }
         }
         // Load Wada colors and combinations from assets on IO thread to prevent ANR
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -119,7 +151,8 @@ class WardrobeViewModel(
     fun computeDailyInspiration(
         clothes: List<ClothingItem>,
         combinations: List<WadaCombination>,
-        calendar: java.util.Calendar = java.util.Calendar.getInstance()
+        calendar: java.util.Calendar = java.util.Calendar.getInstance(),
+        weatherInfo: WeatherInfo? = null
     ): DailyInspirationState? {
         if (combinations.isEmpty()) return null
 
@@ -196,10 +229,67 @@ class WardrobeViewModel(
         val dailySeed = year * 1000L + dayOfYear
         val chosen = eligiblePool[kotlin.random.Random(dailySeed).nextInt(eligiblePool.size)]
 
+        val weatherMatches = if (weatherInfo != null) {
+            WeatherOutfitAdvisor.suggestMatches(clothes, chosen.combination, weatherInfo)
+        } else {
+            emptyList()
+        }
+        val weatherAdvice = weatherInfo?.let { WeatherOutfitAdvisor.buildAdvice(it) }
+
         return DailyInspirationState(
             combination = chosen.combination,
-            displayedColors = chosen.matchedClosetColors
+            displayedColors = chosen.matchedClosetColors,
+            weatherMatches = weatherMatches,
+            weatherAdvice = weatherAdvice
         )
+    }
+
+    /**
+     * Opt in to coarse-location weather suggestions and fetch current weather.
+     */
+    fun enableWeatherSuggestions(context: Context) {
+        _weatherEnabled.value = true
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            repository.setWeatherSuggestionsEnabled(true)
+        }
+        fetchWeatherIfEnabled(context, forceRefresh = true)
+    }
+
+    /**
+     * Opt out of location-based weather suggestions and clear cached weather state.
+     */
+    fun disableWeatherSuggestions() {
+        _weatherEnabled.value = false
+        _weatherState.value = WeatherState.Disabled
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            repository.setWeatherSuggestionsEnabled(false)
+        }
+    }
+
+    /**
+     * Fetches current weather only if the user has explicitly opted in.
+     */
+    fun fetchWeatherIfEnabled(context: Context, forceRefresh: Boolean = false) {
+        if (!_weatherEnabled.value) {
+            _weatherState.value = WeatherState.Disabled
+            return
+        }
+        if (!WeatherService.hasCoarseLocationPermission(context)) {
+            _weatherState.value = WeatherState.PermissionRequired
+            return
+        }
+        val currentReady = _weatherState.value as? WeatherState.Ready
+        if (!forceRefresh && currentReady != null &&
+            (System.currentTimeMillis() - currentReady.info.fetchedAtMillis) < 15 * 60 * 1000L
+        ) {
+            return
+        }
+        if (_weatherState.value is WeatherState.Loading) return
+
+        _weatherState.value = WeatherState.Loading
+        viewModelScope.launch {
+            _weatherState.value = WeatherService.fetchLocalWeather(context)
+        }
     }
 
     fun updateCategories(newCats: List<String>) {
@@ -416,7 +506,7 @@ class WardrobeViewModel(
                     bitmap
                 }
 
-                // 1. Extract dominant color based on center-weighted averaging
+                // 1. Extract dominant color and auto-tag primary color group from saved imagery
                 val dominantHex = extractDominantColorFromBitmap(processedBitmap)
 
                 // 2. Save file to private storage
@@ -428,11 +518,14 @@ class WardrobeViewModel(
                 }
                 bitmap.recycle() // Recycle original bitmap immediately
 
+                val (analyzedHex, colorGroup) = ColorGroupClassifier.analyzeSavedImagery(path, dominantHex)
+
                 // 3. Save to Room database
                 val item = ClothingItem(
                     filePath = path,
                     category = category,
-                    hexColor = dominantHex
+                    hexColor = analyzedHex,
+                    colorGroup = colorGroup.label
                 )
                 repository.insertClothing(item)
                 _selectedGarment.value = item
@@ -462,12 +555,14 @@ class WardrobeViewModel(
 
                 // 2. Save file to private storage (save as PNG to retain transparency if background is removed)
                 val path = saveBitmapToInternalStorage(context, bitmap, isPng = true)
+                val (analyzedHex, colorGroup) = ColorGroupClassifier.analyzeSavedImagery(path, dominantHex)
 
                 // 3. Save to Room database
                 val item = ClothingItem(
                     filePath = path,
                     category = category,
-                    hexColor = dominantHex
+                    hexColor = analyzedHex,
+                    colorGroup = colorGroup.label
                 )
                 repository.insertClothing(item)
                 _selectedGarment.value = item
@@ -544,7 +639,8 @@ class WardrobeViewModel(
                 val item = ClothingItem(
                     filePath = path,
                     category = category,
-                    hexColor = hexColor
+                    hexColor = hexColor,
+                    colorGroup = ColorGroupClassifier.classifyHex(hexColor).label
                 )
                 repository.insertClothing(item)
                 _selectedGarment.value = item
@@ -623,12 +719,18 @@ class WardrobeViewModel(
         item: ClothingItem,
         newHexColor: String,
         rotationDegrees: Int,
+        thermalType: String = item.thermalType,
         onComplete: () -> Unit = {}
     ) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val normalizedHex = ColorUtils.toHexString(ColorUtils.parseSafeColor(newHexColor))
                 val normalizedRotation = ((rotationDegrees % 360) + 360) % 360
+                val normalizedThermal = when (thermalType.trim().uppercase()) {
+                    "WARM" -> "WARM"
+                    "LIGHT" -> "LIGHT"
+                    else -> ""
+                }
                 var finalPath = item.filePath
 
                 if (normalizedRotation != 0 && item.filePath.isNotBlank()) {
@@ -666,13 +768,21 @@ class WardrobeViewModel(
                     }
                 }
 
+                val updatedColorGroup = ColorGroupClassifier.classifyHex(normalizedHex).label
                 repository.updateClothingColorAndPath(
                     id = item.id,
                     hexColor = normalizedHex,
-                    filePath = finalPath
+                    filePath = finalPath,
+                    colorGroup = updatedColorGroup,
+                    thermalType = normalizedThermal
                 )
 
-                val updatedItem = item.copy(hexColor = normalizedHex, filePath = finalPath)
+                val updatedItem = item.copy(
+                    hexColor = normalizedHex,
+                    filePath = finalPath,
+                    colorGroup = updatedColorGroup,
+                    thermalType = normalizedThermal
+                )
                 if (_selectedGarment.value?.id == item.id) {
                     _selectedGarment.value = updatedItem
                     matchWadaAndRecommend(updatedItem)
@@ -745,7 +855,9 @@ data class OutfitRecommendation(
 
 data class DailyInspirationState(
     val combination: WadaCombination,
-    val displayedColors: List<String>
+    val displayedColors: List<String>,
+    val weatherMatches: List<WeatherGarmentMatch> = emptyList(),
+    val weatherAdvice: String? = null
 )
 
 class WardrobeViewModelFactory(
