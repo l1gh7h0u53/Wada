@@ -231,7 +231,7 @@ fun PaletteHarmonyInfoDialog(
                         onExportPng()
                         onDismiss()
                     },
-                    shape = WadaShapes.FilterPill,
+                    shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary

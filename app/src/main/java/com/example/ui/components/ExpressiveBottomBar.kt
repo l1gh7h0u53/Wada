@@ -15,11 +15,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Checkroom
-import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Checkroom
-import androidx.compose.material.icons.outlined.ColorLens
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
@@ -75,7 +73,7 @@ fun ExpressiveBottomBar(
         ExpressiveNavItem(
             title = "Match",
             selectedIcon = Icons.Filled.AutoAwesome,
-            unselectedIcon = Icons.Outlined.ColorLens,
+            unselectedIcon = Icons.Filled.AutoAwesome,
             testTag = "nav_match"
         ),
         ExpressiveNavItem(

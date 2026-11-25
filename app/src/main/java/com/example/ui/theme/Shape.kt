@@ -49,6 +49,6 @@ object WadaShapes {
     // Outfit piece container
     val OutfitPieceShape = RoundedCornerShape(24.dp)
 
-    // Category filter chip
-    val FilterPill = RoundedCornerShape(16.dp)
+    // Category filter chip (fully rounded pill corners)
+    val FilterPill = CircleShape
 }

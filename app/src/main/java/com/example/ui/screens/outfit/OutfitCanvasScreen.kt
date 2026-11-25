@@ -11,29 +11,22 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.res.painterResource
 import com.example.R
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.outlined.Checkroom
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
@@ -44,13 +37,11 @@ import androidx.compose.ui.unit.dp
 import android.widget.Toast
 import androidx.compose.material.icons.filled.IosShare
 import com.example.data.ClothingItem
-import com.example.data.WadaColor
 import com.example.data.WadaCombination
+import com.example.ui.components.DailyStyleInspirationCard
 import com.example.ui.components.MinimalistGalleryEmptyState
 import com.example.ui.screens.dialogs.PaletteHarmonyInfoDialog
-import com.example.ui.screens.dialogs.WadaPaletteHistoryDialog
 import com.example.ui.theme.WadaShapes
-import com.example.ui.theme.buildWadaText
 import com.example.util.ColorMatcher
 import com.example.util.ColorUtils
 import com.example.util.PaletteExportHelper
@@ -81,18 +72,15 @@ fun OutfitCanvasScreen(
 ) {
     val context = LocalContext.current
     val allClothing by viewModel.allClothing.collectAsState()
-    val wadaCombinations by viewModel.wadaCombinations.collectAsState()
     val selectedCombination by viewModel.selectedCombination.collectAsState()
+    val dailyInspiration by viewModel.dailyInspiration.collectAsState()
     val selectedGarment by viewModel.selectedGarment.collectAsState()
     val recommendation by viewModel.outfitRecommendations.collectAsState()
-    val paletteHistory by viewModel.paletteHistory.collectAsState()
     val themeSetting by viewModel.themeSetting.collectAsState()
 
-    var showHistoryModal by remember { mutableStateOf(false) }
     var showHarmonyInfoDialog by remember { mutableStateOf(false) }
     val wadaColors by viewModel.wadaColors.collectAsState()
     var isDetailsExpanded by remember { mutableStateOf(false) }
-    var selectedPartFilter by remember { mutableIntStateOf(0) } // 0 = All, 1, 2, etc.
 
     // Calculate CIELAB Delta-E distances between outfit garments and palette colors
     val harmonyAssessment = remember(recommendation, selectedCombination) {
@@ -116,12 +104,6 @@ fun OutfitCanvasScreen(
         ColorUtils.assessOutfitHarmony(distances)
     }
 
-    // Filter combinations if user selects specific part
-    val displayedCombinations = remember(wadaCombinations, selectedPartFilter) {
-        if (selectedPartFilter == 0) wadaCombinations
-        else wadaCombinations.filter { it.part == selectedPartFilter }
-    }
-
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -129,7 +111,7 @@ fun OutfitCanvasScreen(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Top Action Bar with Looks Brand Icon, History and Quick Shuffle
+        // 1. Top Action Bar with adaptive Looks Brand Icon (7-tap Easter egg)
         item {
             val isLightMode = when (themeSetting) {
                 "LIGHT" -> true
@@ -145,7 +127,7 @@ fun OutfitCanvasScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Top-Left: Looks Brand Icon with secret 7-tap Easter Egg unlock
@@ -176,66 +158,6 @@ fun OutfitCanvasScreen(
                             }
                         }
                 )
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Wada Palette History Button (Dedicated access)
-                    IconButton(
-                        onClick = { showHistoryModal = true },
-                        modifier = Modifier
-                            .size(42.dp)
-                            .background(
-                                MaterialTheme.colorScheme.surfaceContainerHighest,
-                                CircleShape
-                            )
-                            .testTag("palette_history_header_button")
-                    ) {
-                        BadgedBox(
-                            badge = {
-                                if (paletteHistory.isNotEmpty()) {
-                                    Badge(
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        contentColor = MaterialTheme.colorScheme.onPrimary
-                                    ) {
-                                        Text("${paletteHistory.size}")
-                                    }
-                                }
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.History,
-                                contentDescription = "Palette History",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-
-                    // Quick Shuffle Button
-                    IconButton(
-                        onClick = {
-                            if (wadaCombinations.isNotEmpty()) {
-                                viewModel.selectCombination(wadaCombinations.random())
-                            }
-                        },
-                        modifier = Modifier
-                            .size(42.dp)
-                            .background(
-                                MaterialTheme.colorScheme.surfaceContainerHighest,
-                                CircleShape
-                            )
-                            .testTag("shuffle_palette_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Shuffle,
-                            contentDescription = "Shuffle Palette",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
             }
         }
 
@@ -271,162 +193,25 @@ fun OutfitCanvasScreen(
         }
     }
 
-        // 3. Historic Wada Combinations with M3 Buttons and FilterChips
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "HISTORIC COMBINATIONS",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                // Wada Palette History pill button in palette bar
-                AssistChip(
-                    onClick = { showHistoryModal = true },
-                    label = {
-                        Text(
-                            text = "History (${paletteHistory.size})",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.History,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    },
-                    shape = CircleShape,
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        labelColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                    modifier = Modifier.testTag("palette_history_bar_button")
+        // 3. Daily Style Inspiration Card (shown once >= 2 closet colors are logged)
+        dailyInspiration?.let { dailyState ->
+            item {
+                DailyStyleInspirationCard(
+                    combination = dailyState.combination,
+                    displayedColors = dailyState.displayedColors,
+                    wadaColors = wadaColors,
+                    isApplied = selectedCombination?.id == dailyState.combination.id,
+                    onApplyPalette = {
+                        viewModel.selectCombination(dailyState.combination)
+                        Toast.makeText(
+                            context,
+                            "Applied Daily Palette No. ${dailyState.combination.id}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
                 )
             }
         }
-
-        // 4. Combination Selector Chips (M3 FilterChips)
-        item {
-            val availableParts = listOf(0, 1, 2, 3)
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(availableParts) { part ->
-                    val isSelected = selectedPartFilter == part
-                    val label = if (part == 0) "All Palettes (${wadaCombinations.size})" else "Part $part"
-
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { selectedPartFilter = part },
-                        label = {
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                            )
-                        },
-                        shape = WadaShapes.FilterPill,
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ),
-                        modifier = Modifier.testTag("part_filter_chip_$part")
-                    )
-                }
-            }
-        }
-
-        // 5. Combinations Horizontal Streamlined Carousel (M3 Cards & Chips)
-        item {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(displayedCombinations, key = { it.id }) { combo ->
-                    val isSelected = selectedCombination?.id == combo.id
-
-                    CompactCombinationCard(
-                        combo = combo,
-                        isSelected = isSelected,
-                        onClick = { viewModel.selectCombination(combo) }
-                    )
-                }
-            }
-        }
-
-        // 6. Wardrobe Empty Callout if user hasn't added pieces yet
-        if (allClothing.isEmpty()) {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Checkroom,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(40.dp)
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = "Your Wardrobe is Empty",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Scan pieces with camera or add colors to see live outfit matches.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
-                        FilledTonalButton(
-                            onClick = onNavigateToDigitizer,
-                            shape = WadaShapes.FilterPill
-                        ) {
-                            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Digitize Item", style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Modal Sheet for Wada Palette History
-    if (showHistoryModal) {
-        WadaPaletteHistoryDialog(
-            history = paletteHistory,
-            currentCombination = selectedCombination,
-            onSelectCombination = { combo ->
-                viewModel.selectCombination(combo)
-            },
-            onDismiss = { showHistoryModal = false }
-        )
     }
 
     // Modal Sheet for Educational Palette Harmony Lore and High-Res PNG Export
@@ -858,94 +643,6 @@ private fun CompactLayerChip(
                 fontWeight = FontWeight.Bold,
                 maxLines = 1
             )
-        }
-    }
-}
-
-/**
- * Compact M3 Combination Card for browsing the Wada Dictionary in Buttons/Chips format.
- */
-@Composable
-private fun CompactCombinationCard(
-    combo: WadaCombination,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.surfaceContainerHighest
-            } else {
-                MaterialTheme.colorScheme.surfaceContainer
-            }
-        ),
-        border = BorderStroke(
-            width = if (isSelected) 2.dp else 1.dp,
-            color = if (isSelected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-            }
-        ),
-        modifier = modifier
-            .width(180.dp)
-            .testTag("compact_combo_card_${combo.id}")
-    ) {
-        Column(modifier = Modifier.padding(10.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "NO. ${combo.id}",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                if (isSelected) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = "Active",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
-            }
-
-            Text(
-                text = combo.name,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Swatch Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(24.dp)
-                    .clip(RoundedCornerShape(6.dp)),
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                combo.colors.forEach { hex ->
-                    val color = ColorUtils.parseSafeColor(hex)
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .background(color)
-                    )
-                }
-            }
         }
     }
 }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -185,7 +186,7 @@ fun MinimalistGalleryEmptyState(
                 ) {
                     Button(
                         onClick = onPrimaryClick,
-                        shape = WadaShapes.FilterPill,
+                        shape = CircleShape,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp)
@@ -207,7 +208,7 @@ fun MinimalistGalleryEmptyState(
                     if (onSecondaryClick != null && secondaryButtonText != null) {
                         OutlinedButton(
                             onClick = onSecondaryClick,
-                            shape = WadaShapes.FilterPill,
+                            shape = CircleShape,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(48.dp)

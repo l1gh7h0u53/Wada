@@ -472,6 +472,7 @@ fun WardrobeClosetScreen(
                         viewModel.deleteGarment(item.id)
                         itemPendingDelete = null
                     },
+                    shape = CircleShape,
                     colors = ButtonDefaults.filledTonalButtonColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                         contentColor = MaterialTheme.colorScheme.onErrorContainer
@@ -481,7 +482,10 @@ fun WardrobeClosetScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { itemPendingDelete = null }) {
+                TextButton(
+                    onClick = { itemPendingDelete = null },
+                    shape = CircleShape
+                ) {
                     Text("Cancel")
                 }
             }

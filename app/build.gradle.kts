@@ -14,8 +14,8 @@ android {
     applicationId = "com.kookaburrastudios.wada"
     minSdk = 24
     targetSdk = 36
-    versionCode = 6
-    versionName = "1.6.0"
+    versionCode = 7
+    versionName = "1.6.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -58,12 +58,11 @@ android {
   testOptions { unitTests { isIncludeAndroidResources = true } }
 }
 
-// Configure the Secrets Gradle Plugin to use .env and .env.example files
-// to match the convention used in Web projects. Ignore unused keys so secrets
-// are never embedded into client-side BuildConfig bytecode.
+// Configure the Secrets Gradle Plugin to use .env and env.example files.
+// Ignore unused keys so secrets are never embedded into client-side BuildConfig bytecode.
 secrets {
   propertiesFileName = ".env"
-  defaultPropertiesFileName = ".env.example"
+  defaultPropertiesFileName = "env.example"
   ignoreList.add("GEMINI_API_KEY")
 }
 

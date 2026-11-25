@@ -209,6 +209,7 @@ fun HiddenSimplePaletteScreen(
                         }
                     },
                     enabled = pagerState.currentPage > 0,
+                    shape = CircleShape,
                     modifier = Modifier
                         .size(48.dp)
                         .testTag("hidden_palette_prev_button")
@@ -226,7 +227,7 @@ fun HiddenSimplePaletteScreen(
                     onClick = {
                         currentCombo?.let { onSelectPalette(it) }
                     },
-                    shape = WadaShapes.FilterPill,
+                    shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isCurrentSelected) {
                             MaterialTheme.colorScheme.primary
@@ -267,6 +268,7 @@ fun HiddenSimplePaletteScreen(
                         }
                     },
                     enabled = pagerState.currentPage < combinations.size - 1,
+                    shape = CircleShape,
                     modifier = Modifier
                         .size(48.dp)
                         .testTag("hidden_palette_next_button")

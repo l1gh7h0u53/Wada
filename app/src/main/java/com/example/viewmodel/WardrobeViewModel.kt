@@ -69,6 +69,19 @@ class WardrobeViewModel(
     private val _categories = MutableStateFlow<List<String>>(listOf("Tops", "Bottoms", "Shoes", "Accessories"))
     val categories = _categories.asStateFlow()
 
+    /**
+     * Daily Style Inspiration derived reactively from Sanzo Wada's dictionary and the user's
+     * logged closet colors. Remains null until at least 2 distinct colors are logged in the closet,
+     * and exposes only colors present in the closet.
+     */
+    val dailyInspiration: StateFlow<DailyInspirationState?> = combine(
+        allClothing,
+        _wadaCombinations
+    ) { clothes, combinations ->
+        computeDailyInspiration(clothes, combinations)
+    }.flowOn(kotlinx.coroutines.Dispatchers.Default)
+     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     init {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val theme = repository.getThemeSetting()
@@ -94,6 +107,97 @@ class WardrobeViewModel(
                 recordPaletteExploration(first)
             }
         }
+    }
+
+    /**
+     * Deterministically selects today's Daily Style Inspiration from combinations that match
+     * at least 2 distinct colors currently logged in the user's closet.
+     * Only the matched closet colors are included in [DailyInspirationState.displayedColors].
+     */
+    fun computeDailyInspiration(
+        clothes: List<ClothingItem>,
+        combinations: List<WadaCombination>,
+        calendar: java.util.Calendar = java.util.Calendar.getInstance()
+    ): DailyInspirationState? {
+        if (combinations.isEmpty()) return null
+
+        val distinctClosetColors = clothes
+            .map { it.hexColor.trim().uppercase() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        // Require at least 2 distinct colors logged in the closet before showing daily inspiration
+        if (distinctClosetColors.size < 2) return null
+
+        data class MatchCandidate(
+            val combination: WadaCombination,
+            val matchedClosetColors: List<String>,
+            val totalDeltaE: Double
+        )
+
+        val allScored = combinations.map { combo ->
+            // Build all (paletteColorIdx, closetColorIdx, deltaE) pairs and match greedily by lowest Delta-E
+            val pairs = mutableListOf<Triple<Int, Int, Double>>()
+            combo.colors.forEachIndexed { pIdx, pHex ->
+                distinctClosetColors.forEachIndexed { cIdx, cHex ->
+                    pairs.add(Triple(pIdx, cIdx, ColorMatcher.calculateDeltaEFromHex(pHex, cHex)))
+                }
+            }
+            pairs.sortBy { it.third }
+
+            val usedPalette = mutableSetOf<Int>()
+            val usedCloset = mutableSetOf<Int>()
+            val matched = mutableListOf<Pair<Int, Double>>() // closetIdx to deltaE
+
+            for ((pIdx, cIdx, deltaE) in pairs) {
+                if (pIdx !in usedPalette && cIdx !in usedCloset) {
+                    usedPalette.add(pIdx)
+                    usedCloset.add(cIdx)
+                    matched.add(cIdx to deltaE)
+                }
+            }
+
+            // Threshold-filtered matched closet colors (perceptually faithful matches)
+            val closeMatches = matched.filter { it.second <= 30.0 }
+            val resultColors = if (closeMatches.size >= 2) {
+                closeMatches.map { distinctClosetColors[it.first] }
+            } else {
+                // Fallback to the closest 2 matched closet colors if no palette meets strict threshold
+                matched.take(2).map { distinctClosetColors[it.first] }
+            }
+            val scoreSum = if (closeMatches.size >= 2) {
+                closeMatches.sumOf { it.second } / closeMatches.size
+            } else {
+                matched.take(2).sumOf { it.second } / matched.take(2).size.coerceAtLeast(1)
+            }
+
+            MatchCandidate(
+                combination = combo,
+                matchedClosetColors = resultColors,
+                totalDeltaE = scoreSum
+            ) to (closeMatches.size >= 2)
+        }
+
+        val strictMatches = allScored.filter { it.second }.map { it.first }
+        val eligiblePool = if (strictMatches.isNotEmpty()) {
+            strictMatches
+        } else {
+            allScored.map { it.first }
+                .sortedBy { it.totalDeltaE }
+                .take(5)
+        }
+
+        if (eligiblePool.isEmpty()) return null
+
+        val year = calendar.get(java.util.Calendar.YEAR)
+        val dayOfYear = calendar.get(java.util.Calendar.DAY_OF_YEAR)
+        val dailySeed = year * 1000L + dayOfYear
+        val chosen = eligiblePool[kotlin.random.Random(dailySeed).nextInt(eligiblePool.size)]
+
+        return DailyInspirationState(
+            combination = chosen.combination,
+            displayedColors = chosen.matchedClosetColors
+        )
     }
 
     fun updateCategories(newCats: List<String>) {
@@ -560,6 +664,11 @@ data class OutfitRecommendation(
     val bottom: ClothingItem?,
     val shoes: ClothingItem?,
     val accessory: ClothingItem?
+)
+
+data class DailyInspirationState(
+    val combination: WadaCombination,
+    val displayedColors: List<String>
 )
 
 class WardrobeViewModelFactory(

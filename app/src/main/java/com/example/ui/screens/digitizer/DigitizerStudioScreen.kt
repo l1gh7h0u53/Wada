@@ -229,7 +229,7 @@ private fun CameraLensSection(
                 Spacer(modifier = Modifier.height(20.dp))
                 Button(
                     onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-                    shape = WadaShapes.FilterPill,
+                    shape = CircleShape,
                     modifier = Modifier.testTag("request_camera_perm_button")
                 ) {
                     Text("Grant Permission")
@@ -478,7 +478,7 @@ private fun SwatchCanvasSection(
         // Save & Digitize Button
         Button(
             onClick = { onDigitizeColor(selectedHex) },
-            shape = WadaShapes.FilterPill,
+            shape = CircleShape,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp)

@@ -255,6 +255,7 @@ private fun HistoryPaletteItem(
                 if (isSelected) {
                     SuggestionChip(
                         onClick = onApply,
+                        shape = CircleShape,
                         label = {
                             Text(
                                 "Active",
@@ -279,6 +280,7 @@ private fun HistoryPaletteItem(
                 } else {
                     TextButton(
                         onClick = onApply,
+                        shape = CircleShape,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                     ) {
                         Text("Apply", style = MaterialTheme.typography.labelMedium)

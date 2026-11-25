@@ -254,5 +254,65 @@ class ExampleRobolectricTest {
         val appName = context.getString(R.string.app_name)
         assertEquals("Wada", appName)
     }
+
+    @Test
+    fun testDailyInspirationDeterministicPerDay() {
+        val sampleList = (1..346).map { id ->
+            com.example.data.WadaCombination(
+                id = id,
+                name = "Palette $id",
+                colors = listOf("#1D2A44", "#E5BFB1", "#BA7A5E"),
+                part = 1,
+                description = "Sample $id"
+            )
+        }
+        val dayOne = java.util.Calendar.getInstance().apply { set(2026, java.util.Calendar.NOVEMBER, 25) }
+        val dayOneAgain = java.util.Calendar.getInstance().apply { set(2026, java.util.Calendar.NOVEMBER, 25) }
+        val dayTwo = java.util.Calendar.getInstance().apply { set(2026, java.util.Calendar.NOVEMBER, 26) }
+
+        // Empty or 1-color closet must not produce daily inspiration
+        assertEquals(null, viewModel.computeDailyInspiration(emptyList(), sampleList, dayOne))
+        val oneGarment = listOf(
+            com.example.data.ClothingItem(id = 1, filePath = "", category = "Tops", hexColor = "#1D2A44")
+        )
+        assertEquals(null, viewModel.computeDailyInspiration(oneGarment, sampleList, dayOne))
+
+        // 2+ distinct colors logged in closet unlocks daily inspiration showing only logged colors
+        val twoGarments = listOf(
+            com.example.data.ClothingItem(id = 1, filePath = "", category = "Tops", hexColor = "#1D2A44"),
+            com.example.data.ClothingItem(id = 2, filePath = "", category = "Bottoms", hexColor = "#E5BFB1")
+        )
+        val pick1 = viewModel.computeDailyInspiration(twoGarments, sampleList, dayOne)
+        val pick1Repeat = viewModel.computeDailyInspiration(twoGarments, sampleList, dayOneAgain)
+        val pick2 = viewModel.computeDailyInspiration(twoGarments, sampleList, dayTwo)
+
+        assert(pick1 != null && pick2 != null)
+        assertEquals(pick1?.combination?.id, pick1Repeat?.combination?.id)
+        assertEquals(2, pick1?.displayedColors?.size)
+        assert(pick1?.displayedColors?.containsAll(listOf("#1D2A44", "#E5BFB1")) == true)
+        assert(pick1?.combination?.id != pick2?.combination?.id)
+    }
+
+    @Test
+    fun testMatchScreenStreamlinedWithDailyInspiration() {
+        composeTestRule.setContent {
+            MainScreen(viewModel = viewModel)
+        }
+        composeTestRule.waitForIdle()
+
+        // Top Shuffle and History buttons are hidden on Match
+        composeTestRule.onNodeWithTag("palette_history_header_button").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("shuffle_palette_button").assertDoesNotExist()
+
+        // Historic combinations filter chips and duplicate empty wardrobe card are removed from Match
+        composeTestRule.onNodeWithTag("part_filter_chip_0").assertDoesNotExist()
+        composeTestRule.onNode(androidx.compose.ui.test.hasText("Your Wardrobe is Empty")).assertDoesNotExist()
+
+        // Top prompt to digitize first garment exists immediately
+        composeTestRule.onNodeWithTag("minimalist_gallery_empty_state").assertExists()
+
+        // With nothing logged in the closet, Daily Style Inspiration does not appear
+        composeTestRule.onNodeWithTag("daily_style_inspiration_card").assertDoesNotExist()
+    }
 }
 

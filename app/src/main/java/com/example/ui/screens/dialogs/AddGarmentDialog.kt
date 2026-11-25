@@ -225,7 +225,7 @@ fun AddGarmentDialog(
                 ) {
                     TextButton(
                         onClick = onDismiss,
-                        shape = WadaShapes.FilterPill
+                        shape = CircleShape
                     ) {
                         Text("Cancel")
                     }
@@ -235,7 +235,7 @@ fun AddGarmentDialog(
                             onConfirm(selectedCategory, selectedHex)
                             onDismiss()
                         },
-                        shape = WadaShapes.FilterPill,
+                        shape = CircleShape,
                         modifier = Modifier.testTag("confirm_add_garment_button")
                     ) {
                         Text("Save Garment")
