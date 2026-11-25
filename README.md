@@ -1,4 +1,4 @@
-# 🎨 Wada (v1.6.0)
+# 🎨 Wada
 
 > A modern vibe coded Android color-matching & wardrobe canvas powered by Sanzo Wada’s pioneering 1930s color combinations (*Haishoku Sōkan* • 配色総鑑).
 
