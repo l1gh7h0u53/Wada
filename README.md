@@ -2,7 +2,7 @@
 
 > A modern vibe coded Android color-matching & wardrobe canvas powered by Sanzo Wada’s pioneering 1930s color combinations (*Haishoku Sōkan* • 配色総鑑).
 
-[![Version](https://img.shields.io/badge/version-1.6.0-blue.svg)](https://github.com/your-username/wada/releases/tag/v1.6.0)
+[![Version](https://img.shields.io/badge/version-1.6.1-blue.svg)](https://github.com/your-username/wada/releases/tag/v1.6.1)
 [![Kotlin](https://img.shields.io/badge/Kotlin-100%25-7F52FF.svg)](https://kotlinlang.org/)
 [![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4.svg)](https://developer.android.com/jetpack/compose)
 [![Material 3](https://img.shields.io/badge/Material%20Design-M3%20Expressive-7B1FA2.svg)](https://m3.material.io/)
